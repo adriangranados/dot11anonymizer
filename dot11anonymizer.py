@@ -1,6 +1,6 @@
 #
 # dot11anonymizer.py
-# This script anonymizes 802.11 Layer 2 information found in capture (.pcap) files.
+# This script anonymizes 802.11 Layer 2 information found in capture files.
 # Version 1.0
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
@@ -22,9 +22,9 @@
 #
 # Notes:
 # - It only supports captures using Radiotap as the data-link type.
-# - It anonymizes MAC addresses, SSID, device name (if present) and other 
-#   identifiable fields found in the WPS, Interworking (Hotspot 2.0) 
-#   and Wi-Fi Alliance P2P IEs.
+# - It anonymizes MAC addresses (OUIs are preserved), SSID, device name (if present) 
+#   and other identifiable fields found in the WPS, Interworking (Hotspot 2.0) 
+#   and Wi-Fi Alliance P2P information elements.
 #
 
 import binascii
