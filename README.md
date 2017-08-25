@@ -9,6 +9,8 @@ This is a Python script that anonymizes 802.11 Layer 2 information found in capt
 - P2P Device ID (Wi-Fi Alliance P2P Specification)
 - Device Name (WiFi Protected Setup)
 
+![Original vs. Anonymized Capture File](../blob/master/dot11anonymizer-example.png "Original vs. Anonymized Capture File")
+
 ## Requirements
 
 You need Python2 and [Scapy](https://github.com/secdev/scapy).
