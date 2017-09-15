@@ -173,7 +173,7 @@ if __name__ == "__main__":
                         # Wi-Fi Alliance P2P IE
                         elif ouitype == '\x50\x6f\x9a\x09':
                             offset = 4
-                            while offset < ie.len:
+                            while offset + 3 < len(ie.info):
                                 attr_type = ord(ie.info[offset])
                                 attr_len  = ord(ie.info[offset+1]) + (ord(ie.info[offset+2]) << 8)
                                 offset += 3
@@ -189,7 +189,7 @@ if __name__ == "__main__":
                         # Microsoft WPS
                         elif ouitype == '\x00\x50\xf2\x04':
                             offset = 4
-                            while offset < ie.len:
+                            while offset + 4 < len(ie.info):
 
                                 de_type = (ord(ie.info[offset]) << 8)   + ord(ie.info[offset+1])
                                 de_len  = (ord(ie.info[offset+2]) << 8) + ord(ie.info[offset+3])
