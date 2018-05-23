@@ -4,7 +4,7 @@ This is a Python script that anonymizes 802.11 Layer 2 information found in capt
 
 - MAC addresses (OUIs are preserved)
 - SSID
-- Aerohive, Aruba, Cisco or Zebra AP names (if present)
+- Aerohive, Aruba, Cisco, MikroTik/Routerboard, Zebra AP names (if present)
 - HESSID (Hotspot 2.0)
 - P2P Device ID (Wi-Fi Alliance P2P Specification)
 - Device Name (WiFi Protected Setup)
