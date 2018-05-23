@@ -18,7 +18,7 @@ You need Python2 and [Scapy](https://github.com/secdev/scapy).
 ## Usage
 
 ```bash
-python dot11anonymizer.py <input_file>
+python dot11anonymizer.py <input_file> [<input_file> ...]
 ```
 where ```<input_file>``` is a capture file that contains 802.11 frames with [Radiotap](http://www.radiotap.org/) headers.
 
