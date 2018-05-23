@@ -38,6 +38,12 @@ ssid_num     = 0  # counter to suffix anonymized SSIDs
 dev_name_map = {} # map of anonymized device names
 dev_name_num = 0  # counter to suffix anonymized device names
 
+def zero_pad_buffer(buf, buflen):
+    if len(buf) < buflen:
+        for x in range(0, buflen - len(buf)):
+            buf = buf + str(chr(0))
+    return buf
+
 def anonymize_address(addr):
 
     global addr_map
@@ -88,21 +94,7 @@ def anonymize_dev_name(dev_name):
 
     return anonymized_dev_name
 
-def zero_pad_buffer(buf, buflen):
-    if len(buf) < buflen:
-        for x in range(0, buflen - len(buf)):
-            buf = buf + str(chr(0))
-    return buf
-
-
-if __name__ == "__main__":
-
-    if len(sys.argv) < 2:
-        print("Usage: dot11anonymizer.py <input_file>")
-        sys.exit(-1)
-
-    input_file = sys.argv[1]
-    output_file = os.path.splitext(input_file)[0] + '-anonymized.pcap'
+def anonymize_file(input_file, output_file):
 
     with PcapReader(input_file) as pcap_reader:
 
@@ -187,10 +179,7 @@ if __name__ == "__main__":
                                 tlv_offset += 1
 
                                 if tlv_type == 1: # Radio Name
-                                    ap_name = anonymize_dev_name(ie.info[tlv_offset + 10:tlv_offset + tlv_len])
-                                    # Pad the AP name (must be 20 bytes long)
-                                    while len(ap_name) < 20:
-                                        ap_name = ap_name + '\x00'
+                                    ap_name = zero_pad_buffer(anonymize_dev_name(ie.info[tlv_offset + 10:tlv_offset + tlv_len]), 20)
                                     ie.info = ie.info[:tlv_offset + 10] + ap_name + ie.info[tlv_offset + tlv_len:]
 
                                 tlv_offset = tlv_offset + tlv_len
@@ -245,3 +234,13 @@ if __name__ == "__main__":
 
                 # Write anonymized packet
                 pcap_writer.write(RadioTap(str(pkt)[:-4] + str(fcs)))
+
+if __name__ == "__main__":
+
+    if len(sys.argv) < 2:
+        print("Usage: dot11anonymizer.py <input_file> [<input_file> ...]")
+        sys.exit(-1)
+
+    for input_file in sys.argv[1:]:
+        output_file = os.path.splitext(input_file)[0] + '-anonymized.pcap'
+        anonymize_file(input_file, output_file)
