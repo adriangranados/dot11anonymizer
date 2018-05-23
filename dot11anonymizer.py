@@ -170,10 +170,30 @@ if __name__ == "__main__":
 
                         # Aerohive (AP Name)
                         if ouitype == '\x00\x19\x77\x21':
-			    if ord(ie.info[4]) == 1: # AP Name
+                            if ord(ie.info[4]) == 1: # Host Name
                                 ap_name = anonymize_dev_name(ie.info[7:]) + '\x00'
                                 ie.info = ie.info[:6] + chr(len(ap_name)) + ap_name
                                 ie.len = 7 + len(ap_name)
+
+                        # MikroTik (AP Name)
+                        if ouitype == '\x00\x0C\x42\x00':
+                            tlv_offset = 4
+
+                            while tlv_offset < ie.len:
+
+                                tlv_type = ord(ie.info[tlv_offset])
+                                tlv_offset += 1
+                                tlv_len = ord(ie.info[tlv_offset])
+                                tlv_offset += 1
+
+                                if tlv_type == 1: # Radio Name
+                                    ap_name = anonymize_dev_name(ie.info[tlv_offset + 10:tlv_offset + tlv_len])
+                                    # Pad the AP name (must be 20 bytes long)
+                                    while len(ap_name) < 20:
+                                        ap_name = ap_name + '\x00'
+                                    ie.info = ie.info[:tlv_offset + 10] + ap_name + ie.info[tlv_offset + tlv_len:]
+
+                                tlv_offset = tlv_offset + tlv_len
 
                         # Wi-Fi Alliance P2P IE
                         elif ouitype == '\x50\x6f\x9a\x09':
