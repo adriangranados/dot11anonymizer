@@ -168,6 +168,13 @@ if __name__ == "__main__":
                                 ie.info = ie.info[:12] + ap_name
                                 ie.len = 12 + len(ap_name)
 
+                        # Aerohive (AP Name)
+                        if ouitype == '\x00\x19\x77\x21':
+			    if ord(ie.info[4]) == 1: # AP Name
+                                ap_name = anonymize_dev_name(ie.info[7:]) + '\x00'
+                                ie.info = ie.info[:6] + chr(len(ap_name)) + ap_name
+                                ie.len = 7 + len(ap_name)
+
                         # Wi-Fi Alliance P2P IE
                         elif ouitype == '\x50\x6f\x9a\x09':
                             offset = 4
