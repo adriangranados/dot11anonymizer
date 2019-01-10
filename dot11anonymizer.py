@@ -3,7 +3,7 @@
 # This script anonymizes 802.11 Layer 2 information found in capture files.
 # Version 1.0
 #
-# Copyright (c) 2017 Adrian Granados. All rights reserved.
+# Copyright (c) 2019 Adrian Granados. All rights reserved.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -183,6 +183,12 @@ def anonymize_file(input_file, output_file):
                                     ie.info = ie.info[:tlv_offset + 10] + ap_name + ie.info[tlv_offset + tlv_len:]
 
                                 tlv_offset = tlv_offset + tlv_len
+
+                        # Mist (AP Name)
+                        if ouitype == '\x5c\x5b\x35\x01':
+                            ap_name = anonymize_dev_name(ie.info[4:]) + '\x00'
+                            ie.info = ie.info[:4] + ap_name
+                            ie.len = 4 + len(ap_name)
 
                         # Wi-Fi Alliance P2P IE
                         elif ouitype == '\x50\x6f\x9a\x09':
