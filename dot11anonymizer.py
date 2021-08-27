@@ -1,9 +1,9 @@
 #
 # dot11anonymizer.py
 # This script anonymizes 802.11 Layer 2 information found in capture files.
-# Version 1.0
+# Version 2.0
 #
-# Copyright (c) 2019 Adrian Granados. All rights reserved.
+# Copyright (c) 2019-2021 Adrian Granados. All rights reserved.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@
 #
 # Notes:
 # - It only supports captures using Radiotap as the data-link type.
-# - It anonymizes MAC addresses (OUIs are preserved), SSID, device name (if present) 
-#   and other identifiable fields found in the WPS, Interworking (Hotspot 2.0) 
+# - It anonymizes MAC addresses (OUIs are preserved), SSID, device name (if present)
+#   and other identifiable fields found in the WPS, Interworking (Hotspot 2.0)
 #   and Wi-Fi Alliance P2P information elements.
 #
 
@@ -41,7 +41,7 @@ dev_name_num = 0  # counter to suffix anonymized device names
 def zero_pad_buffer(buf, buflen):
     if len(buf) < buflen:
         for x in range(0, buflen - len(buf)):
-            buf = buf + str(chr(0))
+            buf = buf + b'\0'
     return buf
 
 def anonymize_address(addr):
@@ -73,7 +73,7 @@ def anonymize_ssid(ssid):
         anonymized_ssid = ssid_map.get(ssid)
         if not anonymized_ssid:
             ssid_num += 1
-            anonymized_ssid = "SSID_" + str(ssid_num)
+            anonymized_ssid = bytes("SSID_" + str(ssid_num), encoding='ascii')
             ssid_map[ssid] = anonymized_ssid
 
     return anonymized_ssid
@@ -89,10 +89,158 @@ def anonymize_dev_name(dev_name):
         anonymized_dev_name = dev_name_map.get(dev_name)
         if not anonymized_dev_name:
             dev_name_num += 1
-            anonymized_dev_name = "Device_" + str(dev_name_num)
+            anonymized_dev_name = bytes("Device_" + str(dev_name_num), encoding='ascii')
             dev_name_map[dev_name] = anonymized_dev_name
 
     return anonymized_dev_name
+
+def anonymize_ssid_ie(ie):
+    ssid = anonymize_ssid(ie.info)
+    ie.len = len(ssid)
+    ie.info = ssid
+
+def anonymize_multiple_bssid_ie(ie):
+    offset = 1
+    subelements = bytes()
+
+    while offset < ie.len:
+        subelementID  = ie.info[offset]
+        subelementLen = ie.info[offset + 1]
+        offset += 2
+
+        subelementPayload = ie.info[offset:offset+subelementLen]
+
+        if subelementID == 0: # Nontransmitted BSSID Profile
+            subelementOffset  = 0
+            subelementPayloadNew = bytes()
+            while subelementOffset < subelementLen:
+                tagID  = subelementPayload[subelementOffset]
+                tagLen = subelementPayload[subelementOffset + 1]
+                subelementOffset += 2;
+                nontransmitted_ie = Dot11Elt(ID=tagID, len=tagLen, info=subelementPayload[subelementOffset:subelementOffset+tagLen])
+                anonymized_ie = anonymize_ie(nontransmitted_ie)
+                subelementPayloadNew += bytes([anonymized_ie.ID]) + bytes([anonymized_ie.len]) + anonymized_ie.info
+                subelementOffset += tagLen
+
+            subelementNew = bytes([subelementID]) + bytes([len(subelementPayloadNew)]) + subelementPayloadNew
+        else:
+            subelementNew = bytes([subelementID]) + bytes([subelementLen]) + subelementPayload
+
+        subelements += subelementNew
+        offset += subelementLen
+
+    ie.info = bytes([ie.info[0]]) + subelements
+    ie.len  = 1 + len(subelements)
+
+def anonymize_interworking_ie(ie):
+    hessid = ie.info[3:10] # HESSID
+    if hessid:
+        hessid = ':'.join(format(c, '02x') for c in hessid)
+        hessid = mac2str(anonymize_address(hessid))
+        ie.info = b''.join([ie.info[:3], hessid, ie.info[10:]])
+
+def anonymize_cisco_ccx_id_ie(ie):
+    if ie.len >= 26:
+        ap_name = zero_pad_buffer(anonymize_dev_name(ie.info[10:26]), 16)
+        ie.info = b''.join([ie.info[:10], ap_name, ie.info[26:]])
+
+def anonymize_vendor_specific_ie(ie):
+    ouitype = ie.info[:4]
+
+    # Aruba (AP Name)
+    if ouitype == b'\x00\x0b\x86\x01':
+        if ie.info[4] == 3: # AP Name
+            ap_name = anonymize_dev_name(ie.info[6:])
+            ie.info = b''.join([ie.info[:6], ap_name])
+            ie.len  = 6 + len(ap_name)
+
+    # Zebra (AP Name)
+    if ouitype == b'\x00\xa0\xf8\x01':
+        if ie.info[4] == 3:  # AP Name
+            ap_name = anonymize_dev_name(ie.info[12:])
+            ie.info = b''.join([ie.info[:12], ap_name])
+            ie.len = 12 + len(ap_name)
+
+    # Aerohive (AP Name)
+    if ouitype == b'\x00\x19\x77\x21':
+        if ie.info[4] == 1: # Host Name
+            ap_name = anonymize_dev_name(ie.info[7:]) + b'\0'
+            ie.info = b''.join([ie.info[:6], bytes([len(ap_name)]), ap_name])
+            ie.len = 7 + len(ap_name)
+
+    # MikroTik (AP Name)
+    if ouitype == b'\x00\x0C\x42\x00':
+        tlv_offset = 4
+
+        while tlv_offset < ie.len:
+
+            tlv_type = ord(ie.info[tlv_offset])
+            tlv_offset += 1
+            tlv_len = ord(ie.info[tlv_offset])
+            tlv_offset += 1
+
+            if tlv_type == 1: # Radio Name
+                ap_name = zero_pad_buffer(anonymize_dev_name(ie.info[tlv_offset + 10:tlv_offset + tlv_len]), 20)
+                ie.info = b''.join([ie.info[:tlv_offset + 10], ap_name, ie.info[tlv_offset + tlv_len:]])
+
+            tlv_offset = tlv_offset + tlv_len
+
+    # Mist (AP Name)
+    if ouitype == b'\x5c\x5b\x35\x01':
+        ap_name = anonymize_dev_name(ie.info[4:]) + b'\0'
+        ie.info = b''.join([ie.info[:4], ap_name])
+        ie.len = 4 + len(ap_name)
+
+    # Wi-Fi Alliance P2P IE
+    elif ouitype == b'\x50\x6f\x9a\x09':
+        offset = 4
+        while offset + 3 < len(ie.info):
+            attr_type = ie.info[offset]
+            attr_len  = ie.info[offset+1] + (ie.info[offset+2] << 8)
+            offset += 3
+
+            if attr_type == 3: # P2P Device ID
+                device_id = ie.info[offset:offset+attr_len]
+                device_id = ':'.join(format(c, '02x') for c in device_id)
+                device_id = mac2str(anonymize_address(device_id))
+                ie.info = ie.info[:offset] + device_id + ie.info[offset+attr_len:]
+
+            offset += attr_len
+
+    # Microsoft WPS
+    elif ouitype == '\x00\x50\xf2\x04':
+        offset = 4
+        while offset + 4 < len(ie.info):
+
+            de_type = (ord(ie.info[offset]) << 8)   + ord(ie.info[offset+1])
+            de_len  = (ord(ie.info[offset+2]) << 8) + ord(ie.info[offset+3])
+            offset += 4
+
+            if de_type == 0x1011: # Device Name
+                dev_name = ie.info[offset:offset+de_len]
+                dev_name = anonymize_dev_name(dev_name)
+                # Update data element length
+                ie.info = ie.info[:offset-2] + struct.pack(">H", len(dev_name)) + ie.info[offset:]
+                # Update data element value
+                ie.info = ie.info[:offset] + dev_name + ie.info[offset+de_len:]
+                # Update IE length
+                ie.len  = len(ie.info)
+
+            offset += de_len
+
+def anonymize_ie(ie):
+    if ie.ID == 0: # SSID
+        anonymize_ssid_ie(ie)
+    elif ie.ID == 71: # Multiple BSSID
+        anonymize_multiple_bssid_ie(ie)
+    elif ie.ID == 107: # Interworking (Hotspot 2.0)
+        anonymize_interworking_ie(ie)
+    elif ie.ID == 133: # Cisco CCX1 CKIP ID (AP Name)
+        anonymize_cisco_ccx_id_ie(ie)
+    if ie.ID == 221: # Vendor Specific
+        anonymize_vendor_specific_ie(ie)
+
+    return ie
 
 def anonymize_file(input_file, output_file):
 
@@ -106,7 +254,7 @@ def anonymize_file(input_file, output_file):
 
                 # Determine if the FCS is good or bad (we'll use the information later),
                 # but even if the FCS is bad, we will anonymize the frame
-                raw = str(pkt.payload)
+                raw = bytes(pkt.payload)
                 fcs = raw[-4:]
                 crc = struct.pack("I", zlib.crc32(raw[:-4]) & 0xffffffff)
                 good_fcs = fcs == crc
@@ -117,129 +265,24 @@ def anonymize_file(input_file, output_file):
                 pkt.addr3 = anonymize_address(pkt[Dot11].addr3)
                 pkt.addr4 = anonymize_address(pkt[Dot11].addr4)
 
-                # Anonymize SSID, device names (if present) and other address fields
-                ie = pkt
-                while Dot11Elt in ie:
-
-                    ie = ie[Dot11Elt]
-                    # SSID IE
-                    if ie.ID == 0:
-                        ssid = anonymize_ssid(ie.info)
-                        ie.len = len(ssid)
-                        ie.info = ssid
-
-                    # Interworking (Hotspot 2.0) IE
-                    elif ie.ID == 107:
-                        hessid = ie.info[3:10] # HESSID
-                        if hessid:
-                            hessid = ':'.join(format(ord(c), '02x') for c in hessid)
-                            hessid = mac2str(anonymize_address(hessid))
-                            ie.info = ie.info[:3] + hessid + ie.info[10:]
-
-                    # Cisco CCX1 CKIP ID IE (AP Name)
-                    elif ie.ID == 133:
-                        if ie.len >= 26:
-                            ap_name = zero_pad_buffer(anonymize_dev_name(ie.info[10:26]), 16)
-                            ie.info = ie.info[:10] + ap_name + ie.info[26:]
-
-                    # Vendor Specific IE
-                    elif ie.ID == 221:
-                        ouitype = ie.info[:4]
-
-                        # Aruba (AP Name)
-                        if ouitype == '\x00\x0b\x86\x01':
-                            if ord(ie.info[4]) == 3: # AP Name
-                                ap_name = anonymize_dev_name(ie.info[6:])
-                                ie.info = ie.info[:6] + ap_name
-                                ie.len = 6 + len(ap_name)
-
-                        # Zebra (AP Name)
-                        if ouitype == '\x00\xa0\xf8\x01':
-                            if ord(ie.info[4]) == 3:  # AP Name
-                                ap_name = anonymize_dev_name(ie.info[12:])
-                                ie.info = ie.info[:12] + ap_name
-                                ie.len = 12 + len(ap_name)
-
-                        # Aerohive (AP Name)
-                        if ouitype == '\x00\x19\x77\x21':
-                            if ord(ie.info[4]) == 1: # Host Name
-                                ap_name = anonymize_dev_name(ie.info[7:]) + '\x00'
-                                ie.info = ie.info[:6] + chr(len(ap_name)) + ap_name
-                                ie.len = 7 + len(ap_name)
-
-                        # MikroTik (AP Name)
-                        if ouitype == '\x00\x0C\x42\x00':
-                            tlv_offset = 4
-
-                            while tlv_offset < ie.len:
-
-                                tlv_type = ord(ie.info[tlv_offset])
-                                tlv_offset += 1
-                                tlv_len = ord(ie.info[tlv_offset])
-                                tlv_offset += 1
-
-                                if tlv_type == 1: # Radio Name
-                                    ap_name = zero_pad_buffer(anonymize_dev_name(ie.info[tlv_offset + 10:tlv_offset + tlv_len]), 20)
-                                    ie.info = ie.info[:tlv_offset + 10] + ap_name + ie.info[tlv_offset + tlv_len:]
-
-                                tlv_offset = tlv_offset + tlv_len
-
-                        # Mist (AP Name)
-                        if ouitype == '\x5c\x5b\x35\x01':
-                            ap_name = anonymize_dev_name(ie.info[4:]) + '\x00'
-                            ie.info = ie.info[:4] + ap_name
-                            ie.len = 4 + len(ap_name)
-
-                        # Wi-Fi Alliance P2P IE
-                        elif ouitype == '\x50\x6f\x9a\x09':
-                            offset = 4
-                            while offset + 3 < len(ie.info):
-                                attr_type = ord(ie.info[offset])
-                                attr_len  = ord(ie.info[offset+1]) + (ord(ie.info[offset+2]) << 8)
-                                offset += 3
-
-                                if attr_type == 3: # P2P Device ID
-                                    device_id = ie.info[offset:offset+attr_len]
-                                    device_id = ':'.join(format(ord(c), '02x') for c in device_id)
-                                    device_id = mac2str(anonymize_address(device_id))
-                                    ie.info = ie.info[:offset] + device_id + ie.info[offset+attr_len:]
-
-                                offset += attr_len
-
-                        # Microsoft WPS
-                        elif ouitype == '\x00\x50\xf2\x04':
-                            offset = 4
-                            while offset + 4 < len(ie.info):
-
-                                de_type = (ord(ie.info[offset]) << 8)   + ord(ie.info[offset+1])
-                                de_len  = (ord(ie.info[offset+2]) << 8) + ord(ie.info[offset+3])
-                                offset += 4
-
-                                if de_type == 0x1011: # Device Name
-                                    dev_name = ie.info[offset:offset+de_len]
-                                    dev_name = anonymize_dev_name(dev_name)
-                                    # Update data element length
-                                    ie.info = ie.info[:offset-2] + struct.pack(">H", len(dev_name)) + ie.info[offset:]
-                                    # Update data element value
-                                    ie.info = ie.info[:offset] + dev_name + ie.info[offset+de_len:]
-                                    # Update IE length
-                                    ie.len  = len(ie.info)
-
-                                offset += de_len
-
-                    ie = ie.payload
+                # Anonymize information elements
+                subpkt = pkt
+                while Dot11Elt in subpkt:
+                    ie = subpkt[Dot11Elt]
+                    anonymize_ie(ie)
+                    subpkt = subpkt.payload
 
                 # Recompute FCS
                 if good_fcs:
                     # If the FCS was originally good, then we recompute it
-                    fcs = struct.pack("I", zlib.crc32(str(pkt.payload)[:-4]) & 0xffffffff)
+                    fcs = struct.pack("I", zlib.crc32(bytes(pkt[Dot11])[:-4]) & 0xffffffff)
                 else:
                     # If the FCS was originally bad, we set it to 0x00000000
                     # to make sure it remains bad after the modifications to the frame
                     fcs = b'\x00\x00\x00\x00'
 
                 # Write anonymized packet
-                pcap_writer.write(RadioTap(str(pkt)[:-4] + str(fcs)))
+                pcap_writer.write(RadioTap(bytes(pkt)[:-4] + fcs))
 
 if __name__ == "__main__":
 
