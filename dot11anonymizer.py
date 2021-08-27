@@ -146,27 +146,29 @@ def anonymize_cisco_ccx_id_ie(ie):
 
 def anonymize_vendor_specific_ie(ie):
     ouitype = ie.info[:4]
+    ie_info = ie.info
+    ie_len  = ie.len
 
     # Aruba (AP Name)
     if ouitype == b'\x00\x0b\x86\x01':
-        if ie.info[4] == 3: # AP Name
-            ap_name = anonymize_dev_name(ie.info[6:])
-            ie.info = b''.join([ie.info[:6], ap_name])
-            ie.len  = 6 + len(ap_name)
+        if ie_info[4] == 3: # AP Name
+            ap_name = anonymize_dev_name(ie_info[6:])
+            ie_info = b''.join([ie_info[:6], ap_name])
+            ie_len  = 6 + len(ap_name)
 
     # Zebra (AP Name)
     if ouitype == b'\x00\xa0\xf8\x01':
-        if ie.info[4] == 3:  # AP Name
-            ap_name = anonymize_dev_name(ie.info[12:])
-            ie.info = b''.join([ie.info[:12], ap_name])
-            ie.len = 12 + len(ap_name)
+        if ie_info[4] == 3:  # AP Name
+            ap_name = anonymize_dev_name(ie_infoo[12:])
+            ie_info = b''.join([ie_infoo[:12], ap_name])
+            ie_len  = 12 + len(ap_name)
 
     # Aerohive (AP Name)
     if ouitype == b'\x00\x19\x77\x21':
         if ie.info[4] == 1: # Host Name
-            ap_name = anonymize_dev_name(ie.info[7:]) + b'\0'
-            ie.info = b''.join([ie.info[:6], bytes([len(ap_name)]), ap_name])
-            ie.len = 7 + len(ap_name)
+            ap_name = anonymize_dev_name(ie_info[7:]) + b'\0'
+            ie_info = b''.join([ie_info[:6], bytes([len(ap_name)]), ap_name])
+            ie_len  = 7 + len(ap_name)
 
     # MikroTik (AP Name)
     if ouitype == b'\x00\x0C\x42\x00':
@@ -174,59 +176,61 @@ def anonymize_vendor_specific_ie(ie):
 
         while tlv_offset < ie.len:
 
-            tlv_type = ord(ie.info[tlv_offset])
+            tlv_type = ord(ie_info[tlv_offset])
             tlv_offset += 1
-            tlv_len = ord(ie.info[tlv_offset])
+            tlv_len = ord(ie_info[tlv_offset])
             tlv_offset += 1
 
             if tlv_type == 1: # Radio Name
-                ap_name = zero_pad_buffer(anonymize_dev_name(ie.info[tlv_offset + 10:tlv_offset + tlv_len]), 20)
-                ie.info = b''.join([ie.info[:tlv_offset + 10], ap_name, ie.info[tlv_offset + tlv_len:]])
+                ap_name = zero_pad_buffer(anonymize_dev_name(ie_info[tlv_offset + 10:tlv_offset + tlv_len]), 20)
+                ie_info = b''.join([ie_info[:tlv_offset + 10], ap_name, ie_info[tlv_offset + tlv_len:]])
 
             tlv_offset = tlv_offset + tlv_len
 
     # Mist (AP Name)
     if ouitype == b'\x5c\x5b\x35\x01':
-        ap_name = anonymize_dev_name(ie.info[4:]) + b'\0'
-        ie.info = b''.join([ie.info[:4], ap_name])
-        ie.len = 4 + len(ap_name)
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
 
     # Wi-Fi Alliance P2P IE
     elif ouitype == b'\x50\x6f\x9a\x09':
         offset = 4
-        while offset + 3 < len(ie.info):
-            attr_type = ie.info[offset]
-            attr_len  = ie.info[offset+1] + (ie.info[offset+2] << 8)
+        while offset + 3 < len(ie_info):
+            attr_type = ie_info[offset]
+            attr_len  = ie_info[offset+1] + (ie_info[offset+2] << 8)
             offset += 3
 
             if attr_type == 3: # P2P Device ID
-                device_id = ie.info[offset:offset+attr_len]
+                device_id = ie_info[offset:offset+attr_len]
                 device_id = ':'.join(format(c, '02x') for c in device_id)
                 device_id = mac2str(anonymize_address(device_id))
-                ie.info = ie.info[:offset] + device_id + ie.info[offset+attr_len:]
-
+                ie_info = b''.join([ie_info[:offset], device_id, ie_info[offset+attr_len:]])
             offset += attr_len
 
     # Microsoft WPS
-    elif ouitype == '\x00\x50\xf2\x04':
+    elif ouitype == b'\x00\x50\xf2\x04':
         offset = 4
-        while offset + 4 < len(ie.info):
+        while offset + 4 < len(ie_info):
 
-            de_type = (ord(ie.info[offset]) << 8)   + ord(ie.info[offset+1])
-            de_len  = (ord(ie.info[offset+2]) << 8) + ord(ie.info[offset+3])
+            de_type = (ie_info[offset] << 8)   + ie_info[offset+1]
+            de_len  = (ie_info[offset+2] << 8) + ie_info[offset+3]
             offset += 4
 
             if de_type == 0x1011: # Device Name
-                dev_name = ie.info[offset:offset+de_len]
+                dev_name = ie_info[offset:offset+de_len]
                 dev_name = anonymize_dev_name(dev_name)
                 # Update data element length
-                ie.info = ie.info[:offset-2] + struct.pack(">H", len(dev_name)) + ie.info[offset:]
+                ie_info = b''.join([ie_info[:offset-2], struct.pack(">H", len(dev_name)), ie_info[offset:]])
                 # Update data element value
-                ie.info = ie.info[:offset] + dev_name + ie.info[offset+de_len:]
+                ie_info = b''.join([ie_info[:offset], dev_name, ie_info[offset+de_len:]])
                 # Update IE length
-                ie.len  = len(ie.info)
+                ie_len  = len(ie_info)
 
             offset += de_len
+
+    ie.info = ie_info[3:]
+    ie.len  = ie_len
 
 def anonymize_ie(ie):
     if ie.ID == 0: # SSID
@@ -238,7 +242,8 @@ def anonymize_ie(ie):
     elif ie.ID == 133: # Cisco CCX1 CKIP ID (AP Name)
         anonymize_cisco_ccx_id_ie(ie)
     if ie.ID == 221: # Vendor Specific
-        anonymize_vendor_specific_ie(ie)
+        if ie.haslayer(Dot11EltVendorSpecific):
+            anonymize_vendor_specific_ie(ie[Dot11EltVendorSpecific])
 
     return ie
 
@@ -252,12 +257,18 @@ def anonymize_file(input_file, output_file):
 
             if pkt.haslayer(Dot11):
 
-                # Determine if the FCS is good or bad (we'll use the information later),
-                # but even if the FCS is bad, we will anonymize the frame
-                raw = bytes(pkt.payload)
-                fcs = raw[-4:]
-                crc = struct.pack("I", zlib.crc32(raw[:-4]) & 0xffffffff)
-                good_fcs = fcs == crc
+                # Check if frame has FCS
+                has_fcs = False
+                radiotap = pkt[RadioTap]
+                if radiotap.Flags & 0x10:
+                    has_fcs = True
+
+                    # Determine if the FCS is good or bad (we'll use the information later),
+                    # but even if the FCS is bad, we will anonymize the frame
+                    raw = bytes(pkt.payload)
+                    fcs = raw[-4:]
+                    crc = struct.pack("I", zlib.crc32(raw[:-4]) & 0xffffffff)
+                    good_fcs = fcs == crc
 
                 # Anonymize address fields
                 pkt.addr1 = anonymize_address(pkt[Dot11].addr1)
@@ -266,23 +277,28 @@ def anonymize_file(input_file, output_file):
                 pkt.addr4 = anonymize_address(pkt[Dot11].addr4)
 
                 # Anonymize information elements
-                subpkt = pkt
-                while Dot11Elt in subpkt:
-                    ie = subpkt[Dot11Elt]
-                    anonymize_ie(ie)
-                    subpkt = subpkt.payload
+                if pkt.haslayer(Dot11Elt):
+                    subpkt = pkt[Dot11Elt]
+                    while Dot11Elt in subpkt:
+                        ie = subpkt[Dot11Elt]
+                        anonymize_ie(ie)
+                        subpkt = subpkt.payload
 
                 # Recompute FCS
-                if good_fcs:
-                    # If the FCS was originally good, then we recompute it
-                    fcs = struct.pack("I", zlib.crc32(bytes(pkt[Dot11])[:-4]) & 0xffffffff)
-                else:
-                    # If the FCS was originally bad, we set it to 0x00000000
-                    # to make sure it remains bad after the modifications to the frame
-                    fcs = b'\x00\x00\x00\x00'
+                if has_fcs:
+                    if good_fcs:
+                        # If the FCS was originally good, then we recompute it
+                        fcs = struct.pack("I", zlib.crc32(bytes(pkt[Dot11])[:-4]) & 0xffffffff)
+                    else:
+                        # If the FCS was originally bad, we set it to 0x00000000
+                        # to make sure it remains bad after the modifications to the frame
+                        fcs = b'\x00\x00\x00\x00'
 
-                # Write anonymized packet
-                pcap_writer.write(RadioTap(bytes(pkt)[:-4] + fcs))
+                    # Write anonymized packet with new FCS
+                    pcap_writer.write(RadioTap(bytes(pkt)[:-4] + fcs))
+                else:
+                    # Write anonymized packet
+                    pcap_writer.write(RadioTap(bytes(pkt)))
 
 if __name__ == "__main__":
 
