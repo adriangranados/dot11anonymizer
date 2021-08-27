@@ -13,7 +13,7 @@ This is a Python script that anonymizes 802.11 Layer 2 information found in capt
 
 ## Requirements
 
-You need Python2 and [Scapy](https://github.com/secdev/scapy).
+You need Python3 and [Scapy](https://github.com/secdev/scapy).
 
 ## Usage
 
