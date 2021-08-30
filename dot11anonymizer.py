@@ -255,50 +255,52 @@ def anonymize_file(input_file, output_file):
 
         for pkt in pcap_reader:
 
-            if pkt.haslayer(Dot11):
+            if pkt.haslayer(RadioTap):
 
-                # Check if frame has FCS
-                has_fcs = False
-                radiotap = pkt[RadioTap]
-                if radiotap.Flags & 0x10:
-                    has_fcs = True
+                if pkt.haslayer(Dot11):
 
-                    # Determine if the FCS is good or bad (we'll use the information later),
-                    # but even if the FCS is bad, we will anonymize the frame
-                    raw = bytes(pkt.payload)
-                    fcs = raw[-4:]
-                    crc = struct.pack("I", zlib.crc32(raw[:-4]) & 0xffffffff)
-                    good_fcs = fcs == crc
+                    # Check if frame has FCS
+                    has_fcs = False
+                    radiotap = pkt[RadioTap]
+                    if radiotap.Flags & 0x10:
+                        has_fcs = True
 
-                # Anonymize address fields
-                pkt.addr1 = anonymize_address(pkt[Dot11].addr1)
-                pkt.addr2 = anonymize_address(pkt[Dot11].addr2)
-                pkt.addr3 = anonymize_address(pkt[Dot11].addr3)
-                pkt.addr4 = anonymize_address(pkt[Dot11].addr4)
+                        # Determine if the FCS is good or bad (we'll use the information later),
+                        # but even if the FCS is bad, we will anonymize the frame
+                        raw = bytes(pkt.payload)
+                        fcs = raw[-4:]
+                        crc = struct.pack("I", zlib.crc32(raw[:-4]) & 0xffffffff)
+                        good_fcs = fcs == crc
 
-                # Anonymize information elements
-                if pkt.haslayer(Dot11Elt):
-                    subpkt = pkt[Dot11Elt]
-                    while Dot11Elt in subpkt:
-                        ie = subpkt[Dot11Elt]
-                        anonymize_ie(ie)
-                        subpkt = subpkt.payload
+                    # Anonymize address fields
+                    pkt.addr1 = anonymize_address(pkt[Dot11].addr1)
+                    pkt.addr2 = anonymize_address(pkt[Dot11].addr2)
+                    pkt.addr3 = anonymize_address(pkt[Dot11].addr3)
+                    pkt.addr4 = anonymize_address(pkt[Dot11].addr4)
 
-                # Recompute FCS
-                if has_fcs:
-                    if good_fcs:
-                        # If the FCS was originally good, then we recompute it
-                        fcs = struct.pack("I", zlib.crc32(bytes(pkt[Dot11])[:-4]) & 0xffffffff)
+                    # Anonymize information elements
+                    if pkt.haslayer(Dot11Elt):
+                        subpkt = pkt[Dot11Elt]
+                        while Dot11Elt in subpkt:
+                            ie = subpkt[Dot11Elt]
+                            anonymize_ie(ie)
+                            subpkt = subpkt.payload
+
+                    # Recompute FCS
+                    if has_fcs:
+                        if good_fcs:
+                            # If the FCS was originally good, then we recompute it
+                            fcs = struct.pack("I", zlib.crc32(bytes(pkt[Dot11])[:-4]) & 0xffffffff)
+                        else:
+                            # If the FCS was originally bad, we set it to 0x00000000
+                            # to make sure it remains bad after the modifications to the frame
+                            fcs = b'\x00\x00\x00\x00'
+
+                        # Write anonymized packet with new FCS
+                        pcap_writer.write(RadioTap(bytes(pkt)[:-4] + fcs))
                     else:
-                        # If the FCS was originally bad, we set it to 0x00000000
-                        # to make sure it remains bad after the modifications to the frame
-                        fcs = b'\x00\x00\x00\x00'
-
-                    # Write anonymized packet with new FCS
-                    pcap_writer.write(RadioTap(bytes(pkt)[:-4] + fcs))
-                else:
-                    # Write anonymized packet
-                    pcap_writer.write(RadioTap(bytes(pkt)))
+                        # Write anonymized packet
+                        pcap_writer.write(RadioTap(bytes(pkt)))
 
 if __name__ == "__main__":
 
