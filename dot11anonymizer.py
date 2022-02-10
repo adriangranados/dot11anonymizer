@@ -1,7 +1,7 @@
 #
 # dot11anonymizer.py
 # This script anonymizes 802.11 Layer 2 information found in capture files.
-# Version 2.0
+# Version 2.1
 #
 # Copyright (c) 2019-2021 Adrian Granados. All rights reserved.
 #
@@ -174,11 +174,11 @@ def anonymize_vendor_specific_ie(ie):
     if ouitype == b'\x00\x0C\x42\x00':
         tlv_offset = 4
 
-        while tlv_offset < ie.len:
+        while tlv_offset < ie_len:
 
-            tlv_type = ord(ie_info[tlv_offset])
+            tlv_type = ie_info[tlv_offset]
             tlv_offset += 1
-            tlv_len = ord(ie_info[tlv_offset])
+            tlv_len = ie_info[tlv_offset]
             tlv_offset += 1
 
             if tlv_type == 1: # Radio Name
@@ -193,8 +193,34 @@ def anonymize_vendor_specific_ie(ie):
         ie_info = b''.join([ie_info[:4], ap_name])
         ie_len  = 4 + len(ap_name)
 
+    # Ruckus (AP Name)
+    if ouitype == b'\x00\x13\x92\x03':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
+    # Fortinet (AP Name)
+    if ouitype == b'\x00\x09\x0F\x0A':
+        tlv_offset = 5 # need to skip one byte after the OUI
+
+        while tlv_offset < ie_len:
+
+            tlv_type = ie_info[tlv_offset]
+            tlv_offset += 1
+            tlv_len = ie_info[tlv_offset]
+            tlv_offset += 1
+
+            if tlv_type == 1: # AP Name
+                ap_name = anonymize_dev_name(ie_info[tlv_offset:tlv_offset + tlv_len])
+                old_tlv_len = tlv_len
+                tlv_len = len(ap_name)
+                ie_info = b''.join([ie_info[:tlv_offset - 1], tlv_len.to_bytes(1, 'little'), ap_name, ie_info[tlv_offset + old_tlv_len:]])
+                ie_len = ie_len - abs(tlv_len - old_tlv_len)
+
+            tlv_offset = tlv_offset + tlv_len
+
     # Wi-Fi Alliance P2P IE
-    elif ouitype == b'\x50\x6f\x9a\x09':
+    if ouitype == b'\x50\x6f\x9a\x09':
         offset = 4
         while offset + 3 < len(ie_info):
             attr_type = ie_info[offset]
@@ -209,7 +235,7 @@ def anonymize_vendor_specific_ie(ie):
             offset += attr_len
 
     # Microsoft WPS
-    elif ouitype == b'\x00\x50\xf2\x04':
+    if ouitype == b'\x00\x50\xf2\x04':
         offset = 4
         while offset + 4 < len(ie_info):
 
