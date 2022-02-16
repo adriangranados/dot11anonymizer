@@ -1,7 +1,7 @@
 #
 # dot11anonymizer.py
 # This script anonymizes 802.11 Layer 2 information found in capture files.
-# Version 2.1
+# Version 2.2
 #
 # Copyright (c) 2019-2021 Adrian Granados. All rights reserved.
 #
@@ -37,6 +37,12 @@ ssid_num     = 0  # counter to suffix anonymized SSIDs
 
 dev_name_map = {} # map of anonymized device names
 dev_name_num = 0  # counter to suffix anonymized device names
+
+model_map    = {} # map of anonymized models
+model_num    = 0  # counter to suffix anonymized models
+
+sn_map       = {} # map of anonymized serial numbers
+sn_num       = 0  # counter to suffix anonymized serial numbers
 
 def zero_pad_buffer(buf, buflen):
     if len(buf) < buflen:
@@ -93,6 +99,38 @@ def anonymize_dev_name(dev_name):
             dev_name_map[dev_name] = anonymized_dev_name
 
     return anonymized_dev_name
+
+def anonymize_model(model):
+
+    global model_map
+    global model_num
+
+    anonymized_model = model
+
+    if model:
+        anonymized_model = model_map.get(model)
+        if not anonymized_model:
+            model_num += 1
+            anonymized_model = bytes("Model_" + str(model_num), encoding='ascii')
+            model_map[model] = anonymized_model
+
+    return anonymized_model
+
+def anonymize_serial_number(sn):
+
+    global sn_map
+    global sn_num
+
+    anonymized_sn = sn
+
+    if sn:
+        anonymized_sn = sn_map.get(sn)
+        if not anonymized_sn:
+            sn_num += 1
+            anonymized_sn = bytes("SN000" + str(sn_num), encoding='ascii')
+            sn_map[sn] = anonymized_sn
+
+    return anonymized_sn
 
 def anonymize_ssid_ie(ie):
     ssid = anonymize_ssid(ie.info)
@@ -215,7 +253,21 @@ def anonymize_vendor_specific_ie(ie):
                 old_tlv_len = tlv_len
                 tlv_len = len(ap_name)
                 ie_info = b''.join([ie_info[:tlv_offset - 1], tlv_len.to_bytes(1, 'little'), ap_name, ie_info[tlv_offset + old_tlv_len:]])
-                ie_len = ie_len - abs(tlv_len - old_tlv_len)
+                ie_len = ie_len - old_tlv_len + tlv_len
+
+            if tlv_type == 2: # Model
+                model = anonymize_model(ie_info[tlv_offset:tlv_offset + tlv_len])
+                old_tlv_len = tlv_len
+                tlv_len = len(model)
+                ie_info = b''.join([ie_info[:tlv_offset - 1], tlv_len.to_bytes(1, 'little'), model, ie_info[tlv_offset + old_tlv_len:]])
+                ie_len = ie_len - old_tlv_len + tlv_len
+
+            if tlv_type == 3: # Serial number
+                sn = anonymize_serial_number(ie_info[tlv_offset:tlv_offset + tlv_len])
+                old_tlv_len = tlv_len
+                tlv_len = len(sn)
+                ie_info = b''.join([ie_info[:tlv_offset - 1], tlv_len.to_bytes(1, 'little'), sn, ie_info[tlv_offset + old_tlv_len:]])
+                ie_len = ie_len - old_tlv_len + tlv_len
 
             tlv_offset = tlv_offset + tlv_len
 
