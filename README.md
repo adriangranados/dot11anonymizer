@@ -8,6 +8,7 @@ This is a Python script that anonymizes 802.11 Layer 2 information found in capt
 - HESSID (Hotspot 2.0)
 - P2P Device ID (Wi-Fi Alliance P2P Specification)
 - Device Name (WiFi Protected Setup)
+- Model and serial number (Fortinet APs)
 
 ![Original vs. Anonymized Capture File](../master/dot11anonymizer-example.png "Original vs. Anonymized Capture File")
 
