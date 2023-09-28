@@ -95,7 +95,7 @@ def anonymize_dev_name(dev_name):
         anonymized_dev_name = dev_name_map.get(dev_name)
         if not anonymized_dev_name:
             dev_name_num += 1
-            anonymized_dev_name = bytes("Device_" + str(dev_name_num), encoding='ascii')
+            anonymized_dev_name = bytes("AP_" + str(dev_name_num), encoding='ascii')
             dev_name_map[dev_name] = anonymized_dev_name
 
     return anonymized_dev_name
@@ -187,6 +187,19 @@ def anonymize_vendor_specific_ie(ie):
     ie_info = ie.info
     ie_len  = ie.len
 
+    # Alcatel (AP Name)
+    if ouitype == b'\xDC\x08\x56\x01':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
+    # Arista (AP name)
+    if ouitype == b'\x00\x11\x74\x00':
+        if ie_info[4] == 6: # AP name
+            ap_name = anonymize_dev_name(ie_info[6:])
+            ie_info = b''.join([ie_info[:6], ap_name])
+            ie_len  = 6 + len(ap_name)
+
     # Aruba (AP Name)
     if ouitype == b'\x00\x0b\x86\x01':
         if ie_info[4] == 3: # AP Name
@@ -194,14 +207,7 @@ def anonymize_vendor_specific_ie(ie):
             ie_info = b''.join([ie_info[:6], ap_name])
             ie_len  = 6 + len(ap_name)
 
-    # Zebra (AP Name)
-    if ouitype == b'\x00\xa0\xf8\x01':
-        if ie_info[4] == 3:  # AP Name
-            ap_name = anonymize_dev_name(ie_infoo[12:])
-            ie_info = b''.join([ie_infoo[:12], ap_name])
-            ie_len  = 12 + len(ap_name)
-
-    # Aerohive (AP Name)
+    # Extreme (AP Name)
     if ouitype == b'\x00\x19\x77\x21':
         if ie.info[4] == 1: # Host Name
             ap_name = anonymize_dev_name(ie_info[7:]) + b'\0'
@@ -230,6 +236,12 @@ def anonymize_vendor_specific_ie(ie):
         ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
         ie_info = b''.join([ie_info[:4], ap_name])
         ie_len  = 4 + len(ap_name)
+
+    # Nokia (AP Name)
+    if ouitype == b'\x00\x0F\xBB\x04':
+        ap_name = anonymize_dev_name(ie_info[5:]) + b'\0'
+        ie_info = b''.join([ie_info[:5], ap_name])
+        ie_len  = 5 + len(ap_name)
 
     # Ruckus (AP Name)
     if ouitype == b'\x00\x13\x92\x03':
@@ -270,6 +282,13 @@ def anonymize_vendor_specific_ie(ie):
                 ie_len = ie_len - old_tlv_len + tlv_len
 
             tlv_offset = tlv_offset + tlv_len
+
+    # Zebra (AP Name)
+    if ouitype == b'\x00\xa0\xf8\x01':
+        if ie_info[4] == 3:  # AP Name
+            ap_name = anonymize_dev_name(ie_infoo[12:])
+            ie_info = b''.join([ie_infoo[:12], ap_name])
+            ie_len  = 12 + len(ap_name)
 
     # Wi-Fi Alliance P2P IE
     if ouitype == b'\x50\x6f\x9a\x09':
