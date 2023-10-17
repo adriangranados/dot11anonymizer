@@ -1,7 +1,7 @@
 #
 # dot11anonymizer.py
 # This script anonymizes 802.11 Layer 2 information found in capture files.
-# Version 2.2
+# Version 2.2.1
 #
 # Copyright (c) 2019-2021 Adrian Granados. All rights reserved.
 #
@@ -283,6 +283,13 @@ def anonymize_vendor_specific_ie(ie):
 
             tlv_offset = tlv_offset + tlv_len
 
+    # Huawei (AP name)
+    if ouitype == b'\x00\xE0\xFC\x01':
+        if ie_info[4] == 1: # AP name
+            ap_name = anonymize_dev_name(ie_info[6:])
+            ie_info = b''.join([ie_info[:6], ap_name])
+            ie_len  = 6 + len(ap_name)
+
     # Zebra (AP Name)
     if ouitype == b'\x00\xa0\xf8\x01':
         if ie_info[4] == 3:  # AP Name
@@ -359,7 +366,7 @@ def anonymize_file(input_file, output_file):
                     # Check if frame has FCS
                     has_fcs = False
                     radiotap = pkt[RadioTap]
-                    if radiotap.Flags & 0x10:
+                    if radiotap.Flags is not None and radiotap.Flags & 0x10:
                         has_fcs = True
 
                         # Determine if the FCS is good or bad (we'll use the information later),
