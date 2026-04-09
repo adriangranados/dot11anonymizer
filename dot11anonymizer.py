@@ -207,47 +207,18 @@ def anonymize_vendor_specific_ie(ie):
             ie_info = b''.join([ie_info[:6], ap_name])
             ie_len  = 6 + len(ap_name)
 
+    # Cisco (AP name)
+    if ouitype == b'\x00\x40\x96\x2f':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
     # Extreme (AP Name)
     if ouitype == b'\x00\x19\x77\x21':
         if ie.info[4] == 1: # Host Name
             ap_name = anonymize_dev_name(ie_info[7:]) + b'\0'
             ie_info = b''.join([ie_info[:6], bytes([len(ap_name)]), ap_name])
             ie_len  = 7 + len(ap_name)
-
-    # MikroTik (AP Name)
-    if ouitype == b'\x00\x0C\x42\x00':
-        tlv_offset = 4
-
-        while tlv_offset < ie_len:
-
-            tlv_type = ie_info[tlv_offset]
-            tlv_offset += 1
-            tlv_len = ie_info[tlv_offset]
-            tlv_offset += 1
-
-            if tlv_type == 1: # Radio Name
-                ap_name = zero_pad_buffer(anonymize_dev_name(ie_info[tlv_offset + 10:tlv_offset + tlv_len]), 20)
-                ie_info = b''.join([ie_info[:tlv_offset + 10], ap_name, ie_info[tlv_offset + tlv_len:]])
-
-            tlv_offset = tlv_offset + tlv_len
-
-    # Mist (AP Name)
-    if ouitype == b'\x5c\x5b\x35\x01':
-        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
-        ie_info = b''.join([ie_info[:4], ap_name])
-        ie_len  = 4 + len(ap_name)
-
-    # Nokia (AP Name)
-    if ouitype == b'\x00\x0F\xBB\x04':
-        ap_name = anonymize_dev_name(ie_info[5:]) + b'\0'
-        ie_info = b''.join([ie_info[:5], ap_name])
-        ie_len  = 5 + len(ap_name)
-
-    # Ruckus (AP Name)
-    if ouitype == b'\x00\x13\x92\x03':
-        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
-        ie_info = b''.join([ie_info[:4], ap_name])
-        ie_len  = 4 + len(ap_name)
 
     # Fortinet (AP Name)
     if ouitype == b'\x00\x09\x0F\x0A':
@@ -290,27 +261,65 @@ def anonymize_vendor_specific_ie(ie):
             ie_info = b''.join([ie_info[:6], ap_name])
             ie_len  = 6 + len(ap_name)
 
+    # Meter (AP name)
+    if ouitype == b'\x84\x80\x94\x00':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
+    # MikroTik (AP Name)
+    if ouitype == b'\x00\x0C\x42\x00':
+        tlv_offset = 4
+
+        while tlv_offset < ie_len:
+
+            tlv_type = ie_info[tlv_offset]
+            tlv_offset += 1
+            tlv_len = ie_info[tlv_offset]
+            tlv_offset += 1
+
+            if tlv_type == 1: # Radio Name
+                ap_name = zero_pad_buffer(anonymize_dev_name(ie_info[tlv_offset + 10:tlv_offset + tlv_len]), 20)
+                ie_info = b''.join([ie_info[:tlv_offset + 10], ap_name, ie_info[tlv_offset + tlv_len:]])
+
+            tlv_offset = tlv_offset + tlv_len
+
+    # Mist (AP Name)
+    if ouitype == b'\x5c\x5b\x35\x01':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
+    # Nokia (AP Name)
+    if ouitype == b'\x00\x0F\xBB\x04':
+        ap_name = anonymize_dev_name(ie_info[5:]) + b'\0'
+        ie_info = b''.join([ie_info[:5], ap_name])
+        ie_len  = 5 + len(ap_name)
+
+    # Ruckus (AP Name)
+    if ouitype == b'\x00\x13\x92\x03':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
+    # Telecom Infra Project (AP Name)
+    if ouitype == b'\x48\xd0\x17\x02':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
+    # Ubiquiti (AP Name)
+    if ouitype == b'\x00\x15\x6d\x01':
+        ap_name = anonymize_dev_name(ie_info[4:]) + b'\0'
+        ie_info = b''.join([ie_info[:4], ap_name])
+        ie_len  = 4 + len(ap_name)
+
     # Zebra (AP Name)
     if ouitype == b'\x00\xa0\xf8\x01':
         if ie_info[4] == 3:  # AP Name
             ap_name = anonymize_dev_name(ie_infoo[12:])
             ie_info = b''.join([ie_infoo[:12], ap_name])
             ie_len  = 12 + len(ap_name)
-
-    # Wi-Fi Alliance P2P IE
-    if ouitype == b'\x50\x6f\x9a\x09':
-        offset = 4
-        while offset + 3 < len(ie_info):
-            attr_type = ie_info[offset]
-            attr_len  = ie_info[offset+1] + (ie_info[offset+2] << 8)
-            offset += 3
-
-            if attr_type == 3: # P2P Device ID
-                device_id = ie_info[offset:offset+attr_len]
-                device_id = ':'.join(format(c, '02x') for c in device_id)
-                device_id = mac2str(anonymize_address(device_id))
-                ie_info = b''.join([ie_info[:offset], device_id, ie_info[offset+attr_len:]])
-            offset += attr_len
 
     # Microsoft WPS
     if ouitype == b'\x00\x50\xf2\x04':
@@ -332,6 +341,21 @@ def anonymize_vendor_specific_ie(ie):
                 ie_len  = len(ie_info)
 
             offset += de_len
+
+    # Wi-Fi Alliance P2P IE
+    if ouitype == b'\x50\x6f\x9a\x09':
+        offset = 4
+        while offset + 3 < len(ie_info):
+            attr_type = ie_info[offset]
+            attr_len  = ie_info[offset+1] + (ie_info[offset+2] << 8)
+            offset += 3
+
+            if attr_type == 3: # P2P Device ID
+                device_id = ie_info[offset:offset+attr_len]
+                device_id = ':'.join(format(c, '02x') for c in device_id)
+                device_id = mac2str(anonymize_address(device_id))
+                ie_info = b''.join([ie_info[:offset], device_id, ie_info[offset+attr_len:]])
+            offset += attr_len
 
     ie.info = ie_info[3:]
     ie.len  = ie_len
